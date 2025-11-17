@@ -11,14 +11,14 @@ import plotly.graph_objects as go
 import plotly.express as px
 from audiorecorder import audiorecorder 
 
-# ===================== PAGE CONFIG =====================
+# PAGE CONFIG
 st.set_page_config(
     page_title="Audio Classifier - Buka vs Tutup",
     page_icon="🔊",
     layout="wide"
 )
 
-# ===================== CUSTOM CSS (TEMA GELAP) =====================
+# CUSTOM CSS
 st.markdown("""
 <style>
 /* Tema Dark Mode */
@@ -69,6 +69,22 @@ h1, h2, h3, h4 {
 .result-tutup { border-left: 6px solid #dc3545; } /* Merah */
 .result-denied { border-left: 6px solid #dc3545; } /* Merah */
 
+/* Kotak Info Kuning (Gelap) */
+.info-box {
+    text-align: center; 
+    padding: 10px; 
+    background-color: #2b2700; /* Kuning gelap */
+    color: #ffc107; /* Teks kuning */
+    border: 1px solid #ffc107;
+    border-radius: 8px; 
+    margin-bottom: 20px;
+}
+.info-box p {
+    color: #ffc107;
+    font-weight: bold; 
+    margin: 0;
+}
+
 /* Teks kecil */
 .small-muted { 
     color: #9aa6b2; /* Abu-abu muda */
@@ -97,7 +113,7 @@ h1, h2, h3, h4 {
 """, unsafe_allow_html=True)
 
 
-# ===================== RESOURCE LOADING (DARI PIPELINE KITA) =====================
+#  RESOURCE LOADING
 @st.cache_resource
 def load_resources():
     MODEL_PATH = "model_final.pkl"
@@ -120,7 +136,7 @@ def load_resources():
         raise FileNotFoundError("File(s) tidak ditemukan atau gagal diload:\n- " + "\n- ".join(missing))
     return model, scaler, le, list_fitur_terbaik
 
-# ===================== FEATURE EXTRACTION (DARI SEL 6/14 KITA) =====================
+# FEATURE EXTRACTION
 def extract_features_pro(file_path, sr_target=22050, n_mfcc=20):
     """
     Mengekstrak BANYAK FITUR (94 Fitur):
@@ -129,7 +145,7 @@ def extract_features_pro(file_path, sr_target=22050, n_mfcc=20):
     try:
         y, sr = librosa.load(file_path, sr=sr_target, mono=True)
         y, _ = librosa.effects.trim(y, top_db=20)
-        if len(y) < 1000: return None, None, None
+        if len(y) < 1000: return None
         features = {
             'mean': np.mean(y), 'std': np.std(y), 'skewness': scipy.stats.skew(y),
             'kurtosis': scipy.stats.kurtosis(y), 'iqr': scipy.stats.iqr(y),
@@ -156,13 +172,15 @@ def extract_features_pro(file_path, sr_target=22050, n_mfcc=20):
         st.error(f"Gagal saat ekstraksi fitur: {e}")
         return None, None, None
 
-# ===================== PREDICT FUNCTION (DARI SEL 14 KITA) =====================
+# PREDICT FUNCTION
 def predict_audio(file_path, model, scaler, list_fitur_terbaik, le):
+    # Ekstrak 94 fitur & dapatkan audio
     fitur_dict, y, sr = extract_features_pro(file_path)
     if fitur_dict is None:
         return "Error: Gagal memproses file audio.", None, None, None, None, None
     df_single = pd.DataFrame([fitur_dict])
     
+    # Terapkan pipeline (Scale 94 -> Pilih N)
     try:
         original_94_features = scaler.feature_names_in_
         df_ordered = df_single[original_94_features]
@@ -172,52 +190,42 @@ def predict_audio(file_path, model, scaler, list_fitur_terbaik, le):
     except Exception as e:
          return f"Error: Gagal memproses pipeline: {e}", None, None, None, None, None
 
+    # Prediksi
     prediksi_angka = model.predict(df_final)       
     prediksi_proba_all = model.predict_proba(df_final)[0] 
+    
+    # Decode
     prediksi_label = le.inverse_transform(prediksi_angka)[0] 
-    confidence = np.max(prediksi_proba_all)
+    confidence = np.max(prediksi_proba_all) # Nilai 0.0 s/d 1.0
     
     return prediksi_label, confidence, prediksi_proba_all, fitur_dict, y, sr
 
-# ===================== PLOTS (Dengan Tampilan Tema Gelap) =====================
+# PLOTS
 def plot_waveform(y, sr):
     time = np.linspace(0, len(y)/sr, len(y))
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=time, y=y, mode="lines", line=dict(color="#2ca8ff")))
+    fig.add_trace(go.Scatter(x=time, y=y, mode="lines", line=dict(color="#2ca8ff"))) # Warna biru terang
     fig.update_layout(title="Waveform", xaxis_title="Time (s)", yaxis_title="Amplitude",
                         height=250, margin=dict(l=0,r=0,t=40,b=0),
-                        paper_bgcolor="#0e1117", plot_bgcolor="#1a1d23",
-                        font=dict(color="#f8f9fa"))
+                        paper_bgcolor="#0e1117", plot_bgcolor="#1a1d23", # Latar belakang gelap
+                        font=dict(color="#f8f9fa")) # Teks terang
     return fig
 
 def plot_spectrogram(y, sr):
     S = librosa.feature.melspectrogram(y=y, sr=sr)
     S_dB = librosa.power_to_db(S, ref=np.max)
-    fig = px.imshow(S_dB, color_continuous_scale="magma", aspect="auto")
+    fig = px.imshow(S_dB, color_continuous_scale="magma", aspect="auto") # 'magma' cocok untuk gelap
     fig.update_layout(title="Mel Spectrogram", xaxis_title="Frame", yaxis_title="Mel bands",
                         height=300, margin=dict(l=0,r=0,t=40,b=0),
-                        paper_bgcolor="#0e1117", plot_bgcolor="#1a1d23",
-                        font=dict(color="#f8f9fa"))
+                        paper_bgcolor="#0e1117", plot_bgcolor="#1a1d23", # Latar belakang gelap
+                        font=dict(color="#f8f9fa")) # Teks terang
     return fig
 
-# ===================== MAIN APP =====================
+# MAIN APP
 def main():
     st.markdown("<h1>Klasifikasi Suara: Sistem Buka Tutup</h1>", unsafe_allow_html=True)
     
-    # --- 1. LOAD RESOURCES ---
-    try:
-        model, scaler, le, list_fitur_terbaik = load_resources()
-    except FileNotFoundError as e:
-        st.error(f"Gagal memuat resources:\n{str(e)}")
-        st.info("Pastikan file 'model_final.pkl', 'scaler.pkl', 'label_encoder.pkl', dan 'list_fitur_terbaik.json' berada di folder yang sama dengan app.py")
-        st.stop()
-    
-    confidence_threshold = 0.80 # Default 80% (Hardcoded)
-
-    # --- 2. BUAT KONTROL INPUT ---
-    temp_path_to_predict = None
-    run_prediction = False
-
+    # Buat 2 kolom untuk input
     col_upload, col_record = st.columns(2)
     
     with col_upload:
@@ -225,61 +233,67 @@ def main():
         uploaded_file = st.file_uploader("Upload file audio (.wav)", type=["wav"], label_visibility="collapsed")
 
     with col_record:
-        st.markdown("<h4>Rekam suara untuk Prediksi:</h4>", unsafe_allow_html=True) 
+        st.markdown("<h4>Rekam suara (untuk Download):</h4>", unsafe_allow_html=True)
         audio = audiorecorder("Klik untuk mulai/stop merekam", "Merekam...")
-
-    # --- 3. LOGIKA UNTUK MENANGANI INPUT & TOMBOL ---
-
-    # Logika untuk Kolom Upload
-    with col_upload:
-        if uploaded_file is not None:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-                tmp.write(uploaded_file.read())
-                temp_path_to_predict = tmp.name 
-            st.audio(uploaded_file, format="audio/wav")
-
-            if st.button("Jalankan Prediksi (dari File)"):
-                run_prediction = True 
-
+    
+    # Load resources (dipindahkan ke atas agar bisa diakses oleh tombol)
+    try:
+        model, scaler, le, list_fitur_terbaik = load_resources()
+    except FileNotFoundError as e:
+        st.error(f"Gagal memuat resources:\n{str(e)}")
+        st.info("Pastikan file 'model_final.pkl', 'scaler.pkl', 'label_encoder.pkl', dan 'list_fitur_terbaik.json' berada di folder yang sama dengan app.py")
+        st.stop()
+    
+    confidence_threshold = 0.80 # Default 80%
+    
     # Logika untuk Kolom Rekam
     with col_record:
         if audio is not None and len(audio) > 0:
             st.audio(audio.export(format="wav").read(), format="audio/wav")
             
+            st.download_button(
+                label="Download Rekaman (.wav)",
+                data=audio.export(format="wav").read(),
+                file_name="rekaman_saya.wav",
+                mime="audio/wav"
+            )
+
+    # Logika untuk Kolom Upload (hanya tampilkan audio dan tombol)
+    temp_path_upload = None
+    run_prediction = False
+    
+    with col_upload:
+        if uploaded_file is not None:
+            # Simpan file upload ke temp
             with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-                audio.export(tmp.name, format="wav")
-                
-                if temp_path_to_predict is not None:
-                    try:
-                        os.unlink(temp_path_to_predict) 
-                    except:
-                        pass 
-                
-                temp_path_to_predict = tmp.name 
+                tmp.write(uploaded_file.read())
+                temp_path_upload = tmp.name
+            st.audio(uploaded_file, format="audio/wav")
 
-            if st.button("Jalankan Prediksi (dari Rekaman)"):
-                run_prediction = True 
+            # Tombol prediksi HANYA muncul jika ada file upload
+            if st.button("Jalankan Prediksi"):
+                run_prediction = True
 
-    # --- 4. TAMPILKAN HASIL PREDIKSI (Blok ini sekarang di luar kolom) ---
-    if run_prediction and temp_path_to_predict:
+    # TAMPILKAN HASIL PREDIKSI DI LUAR KOLOM (FULL WIDTH DI TENGAH)
+    if run_prediction and temp_path_upload:
         with st.spinner("Menganalisis audio..."):
             try:
                 pred_label, confidence, proba_all, fitur_mentah, y, sr = predict_audio(
-                    temp_path_to_predict, model, scaler, list_fitur_terbaik, le
+                    temp_path_upload, model, scaler, list_fitur_terbaik, le
                 )
             except Exception as e:
                 st.error(f"Kesalahan saat prediksi: {e}")
-                if os.path.exists(temp_path_to_predict):
-                    os.unlink(temp_path_to_predict) 
-                st.stop() 
+                if os.path.exists(temp_path_upload):
+                    os.unlink(temp_path_upload)
+                st.stop()
 
-            if proba_all is None: 
-                st.error(pred_label) 
-                if os.path.exists(temp_path_to_predict):
-                    os.unlink(temp_path_to_predict) 
-                st.stop() 
+            if proba_all is None:
+                st.error(pred_label)
+                if os.path.exists(temp_path_upload):
+                    os.unlink(temp_path_upload)
+                st.stop()
 
-        # --- Logika Verifikasi ---
+        # Logika Verifikasi
         akses_diterima = True
         pesan_verifikasi = ""
         
@@ -290,16 +304,17 @@ def main():
             akses_diterima = False
             pesan_verifikasi = f"🚨 AKSES DITOLAK! (Keyakinan Rendah)"
         else:
-            akses_diterima = True 
+            akses_diterima = True
             pesan_verifikasi = f"✅ AKSES DITERIMA! (Prediksi = {pred_label.upper()})"
 
-        
-        # === Tampilkan Hasil ===
-        st.markdown("<br><hr>", unsafe_allow_html=True) 
+        # Tampilkan Hasil DI TENGAH (FULL WIDTH)
+        st.markdown("<br><hr>", unsafe_allow_html=True)
         
         if akses_diterima:
+            # Pesan verifikasi di tengah
             st.markdown(f"<h3 style='text-align: center;'>{pesan_verifikasi}</h3>", unsafe_allow_html=True)
             
+            # Kartu hasil di tengah
             if "buka" in pred_label.lower():
                 card_class = "result-buka"
                 card_title = f"PREDIKSI: {pred_label.upper()}"
@@ -307,24 +322,27 @@ def main():
                 card_class = "result-tutup"
                 card_title = f"PREDIKSI: {pred_label.upper()}"
             else: 
-                card_class = "result-buka" 
+                card_class = "result-buka"
                 card_title = f"PREDIKSI: {pred_label.upper()}"
 
             st.markdown(f'<div class="result-card {card_class}"><h2>{card_title}</h2>'
                         f'<p style="font-size: 1.2rem; margin:0;">Confidence: <b>{confidence*100:.1f}%</b></p></div>', 
                         unsafe_allow_html=True)
 
+            # Buat 3 kolom untuk konten detail (kiri kosong, tengah isi, kanan kosong)
             col_left, col_center, col_right = st.columns([1, 2, 1])
             
             with col_center:
+                # Tampilkan fitur yang KITA gunakan
                 st.markdown("<br><b>Fitur yang digunakan (Nilai Mentah):</b>", unsafe_allow_html=True)
                 with st.expander("Lihat detail fitur"):
                     for f in list_fitur_terbaik:
                         st.markdown(f"- <code>{f}</code>: <b>{fitur_mentah[f]:.5f}</b>", unsafe_allow_html=True)
                 
+                # Tampilkan plot probabilitas 5 KELAS KITA
                 prob_df = pd.DataFrame({"Kelas": le.classes_, "Probabilitas (%)": proba_all * 100})
                 fig_bar = px.bar(prob_df, x="Kelas", y="Probabilitas (%)", color="Kelas",
-                                 color_discrete_map={ 
+                                 color_discrete_map={
                                      'aqbil_buka': '#28a745', 'reni_buka': '#20c997',
                                      'aqbil_tutup': '#dc3545', 'reni_tutup': '#fd7e14',
                                      'other': '#ffc107'
@@ -333,6 +351,7 @@ def main():
                                         font=dict(color="#f8f9fa"), height=300)
                 st.plotly_chart(fig_bar, use_container_width=True)
 
+                # Plot audio dalam 2 kolom
                 col_wave, col_spec = st.columns(2)
                 with col_wave:
                     st.plotly_chart(plot_waveform(y, sr), use_container_width=True)
@@ -340,7 +359,7 @@ def main():
                     st.plotly_chart(plot_spectrogram(y, sr), use_container_width=True)
         
         else:
-            # --- Jika ditolak, tampilkan format baru ---
+            # Jika ditolak
             st.markdown(f"<h3 style='text-align: center;'>{pesan_verifikasi}</h3>", unsafe_allow_html=True)
             
             detail_pesan = ""
@@ -353,16 +372,17 @@ def main():
                                 f"\n🚫 Model tidak cukup yakin dengan prediksi ({pred_label.upper()})\n"
                                 f"\n🔒 Akses ditolak untuk keamanan sistem")
 
-            # Tampilkan kartu merah dengan teks di tengah
+            # Tampilkan kartu merah
             st.markdown(f'<div class="result-card result-denied">'
                         f'<h2>AKSES DITOLAK</h2>'
-                        f'<pre style="text-align: center; font-size: 1.1rem; color: #f8f9fa; background: #1a1d23; border: none; padding: 0; white-space: pre-wrap; font-family: inherit;">{detail_pesan}</pre></div>', 
+                        f'<pre style="text-align: left; font-size: 1.1rem; color: #f8f9fa; background: #1a1d23; border: none; padding: 0; white-space: pre-wrap; font-family: inherit;">{detail_pesan}</pre></div>', 
                         unsafe_allow_html=True)
             
+            # Buat 3 kolom untuk konten detail
             col_left, col_center, col_right = st.columns([1, 2, 1])
             
             with col_center:
-                # Tampilkan juga rincian probabilitas (ini berguna untuk debug)
+                # Tampilkan rincian probabilitas
                 st.subheader("Detail Probabilitas")
                 prob_df = pd.DataFrame({"Kelas": le.classes_, "Probabilitas (%)": proba_all * 100})
                 fig_bar = px.bar(prob_df, x="Kelas", y="Probabilitas (%)", color="Kelas",
@@ -375,9 +395,9 @@ def main():
                                         font=dict(color="#f8f9fa"), height=300)
                 st.plotly_chart(fig_bar, use_container_width=True)
             
-        # Hapus file temp di luar blok 'if', agar selalu dijalankan
-        if os.path.exists(temp_path_to_predict):
-            os.unlink(temp_path_to_predict)
+        # Hapus file temp
+        if os.path.exists(temp_path_upload):
+            os.unlink(temp_path_upload)
 
 if __name__ == "__main__":
     main()
