@@ -1,3 +1,4 @@
+# app.py
 import streamlit as st
 import os
 import librosa
@@ -160,7 +161,7 @@ def extract_features_pro(file_path, sr_target=22050, n_mfcc=20):
 def predict_audio(file_path, model, scaler, list_fitur_terbaik, le):
     fitur_dict, y, sr = extract_features_pro(file_path)
     if fitur_dict is None:
-        return "Error: Gagal memproses file audio.", None, None, None, None, None
+        return "Error: Gagal memproses file audio (mungkin terlalu pendek atau hening).", None, None, None, None, None
     df_single = pd.DataFrame([fitur_dict])
     
     try:
@@ -205,7 +206,6 @@ def main():
     st.markdown("<h1>Klasifikasi Suara: Sistem Buka Tutup</h1>", unsafe_allow_html=True)
     
     # --- 1. LOAD RESOURCES ---
-    # Muat resources di awal
     try:
         model, scaler, le, list_fitur_terbaik = load_resources()
     except FileNotFoundError as e:
@@ -216,8 +216,6 @@ def main():
     confidence_threshold = 0.80 # Default 80% (Hardcoded)
 
     # --- 2. BUAT KONTROL INPUT ---
-    
-    # Variabel untuk menyimpan file yang akan diprediksi
     temp_path_to_predict = None
     run_prediction = False
 
@@ -228,7 +226,7 @@ def main():
         uploaded_file = st.file_uploader("Upload file audio (.wav)", type=["wav"], label_visibility="collapsed")
 
     with col_record:
-        st.markdown("<h4>Rekam suara untuk Prediksi:</h4>", unsafe_allow_html=True) # Judul diubah
+        st.markdown("<h4>Rekam suara untuk Prediksi:</h4>", unsafe_allow_html=True) 
         audio = audiorecorder("Klik untuk mulai/stop merekam", "Merekam...")
 
     # --- 3. LOGIKA UNTUK MENANGANI INPUT & TOMBOL ---
@@ -236,37 +234,32 @@ def main():
     # Logika untuk Kolom Upload
     with col_upload:
         if uploaded_file is not None:
-            # Simpan file upload ke temp
             with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
                 tmp.write(uploaded_file.read())
-                temp_path_to_predict = tmp.name # Tetapkan file ini untuk prediksi
+                temp_path_to_predict = tmp.name 
             st.audio(uploaded_file, format="audio/wav")
 
-            # Tombol prediksi HANYA muncul jika ada file upload
             if st.button("Jalankan Prediksi (dari File)"):
-                run_prediction = True # Set flag untuk prediksi
+                run_prediction = True 
 
     # Logika untuk Kolom Rekam
     with col_record:
         if audio is not None and len(audio) > 0:
             st.audio(audio.export(format="wav").read(), format="audio/wav")
             
-            # Simpan file rekaman ke temp
             with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
                 audio.export(tmp.name, format="wav")
                 
-                # Jika user juga upload file, rekaman akan menimpa
                 if temp_path_to_predict is not None:
                     try:
-                        os.unlink(temp_path_to_predict) # Hapus temp file upload
+                        os.unlink(temp_path_to_predict) 
                     except:
-                        pass # Abaikan jika file tidak ada
+                        pass 
                 
-                temp_path_to_predict = tmp.name # Tetapkan file ini untuk prediksi
+                temp_path_to_predict = tmp.name 
 
-            # Tombol prediksi HANYA muncul jika ada rekaman
             if st.button("Jalankan Prediksi (dari Rekaman)"):
-                run_prediction = True # Set flag untuk prediksi
+                run_prediction = True 
 
     # --- 4. TAMPILKAN HASIL PREDIKSI (Blok ini sekarang di luar kolom) ---
     if run_prediction and temp_path_to_predict:
@@ -277,15 +270,13 @@ def main():
                 )
             except Exception as e:
                 st.error(f"Kesalahan saat prediksi: {e}")
-                if os.path.exists(temp_path_to_predict):
-                    os.unlink(temp_path_to_predict) # Hapus temp file jika error
-                st.stop() # Hentikan eksekusi
+                if os.path.exists(temp_path_to_predict): os.unlink(temp_path_to_predict) 
+                st.stop() 
 
-            if proba_all is None: # Cek jika terjadi error
-                st.error(pred_label) # 'pred_label' akan berisi pesan error
-                if os.path.exists(temp_path_to_predict):
-                    os.unlink(temp_path_to_predict) # Hapus temp file jika error
-                st.stop() # Hentikan eksekusi
+            if proba_all is None: 
+                st.error(pred_label) 
+                if os.path.exists(temp_path_to_predict): os.unlink(temp_path_to_predict) 
+                st.stop() 
 
         # --- Logika Verifikasi ---
         akses_diterima = True
@@ -298,17 +289,16 @@ def main():
             akses_diterima = False
             pesan_verifikasi = f"AKSES DITOLAK! (Keyakinan Rendah)"
         else:
-            akses_diterima = True # Diterima
+            akses_diterima = True 
             pesan_verifikasi = f"AKSES DITERIMA! (Prediksi = {pred_label.upper()})"
 
         
         # === Tampilkan Hasil ===
-        st.markdown("<br><hr>", unsafe_allow_html=True) # Garis pemisah
+        st.markdown("<br><hr>", unsafe_allow_html=True) 
         
         if akses_diterima:
             st.markdown(f"<h3 style='text-align: center;'>{pesan_verifikasi}</h3>", unsafe_allow_html=True)
             
-            # Kartu hasil di tengah
             if "buka" in pred_label.lower():
                 card_class = "result-buka"
                 card_title = f"PREDIKSI: {pred_label.upper()}"
@@ -316,24 +306,21 @@ def main():
                 card_class = "result-tutup"
                 card_title = f"PREDIKSI: {pred_label.upper()}"
             else: 
-                card_class = "result-buka" # Default
+                card_class = "result-buka" 
                 card_title = f"PREDIKSI: {pred_label.upper()}"
 
             st.markdown(f'<div class="result-card {card_class}"><h2>{card_title}</h2>'
                         f'<p style="font-size: 1.2rem; margin:0;">Confidence: <b>{confidence*100:.1f}%</b></p></div>', 
                         unsafe_allow_html=True)
 
-            # Buat 3 kolom untuk konten detail (kiri kosong, tengah isi, kanan kosong)
             col_left, col_center, col_right = st.columns([1, 2, 1])
             
             with col_center:
-                # Tampilkan fitur yang KITA gunakan
                 st.markdown("<br><b>Fitur yang digunakan (Nilai Mentah):</b>", unsafe_allow_html=True)
                 with st.expander("Lihat detail fitur"):
                     for f in list_fitur_terbaik:
                         st.markdown(f"- <code>{f}</code>: <b>{fitur_mentah[f]:.5f}</b>", unsafe_allow_html=True)
                 
-                # Tampilkan plot probabilitas 5 KELAS KITA
                 prob_df = pd.DataFrame({"Kelas": le.classes_, "Probabilitas (%)": proba_all * 100})
                 fig_bar = px.bar(prob_df, x="Kelas", y="Probabilitas (%)", color="Kelas",
                                  color_discrete_map={ 
@@ -345,7 +332,6 @@ def main():
                                         font=dict(color="#f8f9fa"), height=300)
                 st.plotly_chart(fig_bar, use_container_width=True)
 
-                # Plot audio dalam 2 kolom
                 col_wave, col_spec = st.columns(2)
                 with col_wave:
                     st.plotly_chart(plot_waveform(y, sr), use_container_width=True)
